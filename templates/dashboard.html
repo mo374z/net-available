@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Stats Dashboard</title>
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@^3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@^2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@^1"></script>
+</head>
+    <body>
+        <div class="container mt-4">
+            <h1 class="mb-4">Network Stats Dashboard</h1>
+            <div class="row">
+                <div class="col-md-4">
+                    <h3>Current Stats</h3>
+                    <p>Ping: <span id="ping"></span></p>
+                    <p>Download: <span id="download"></span></p>
+                    <p>Upload: <span id="upload"></span></p>
+                    <div id="network-status" class="p-2"></div>
+                    <p>Availability: <span id="availability"></span>%</p>
+                </div>
+                <div class="col-md-8">
+                    <canvas id="speedChart"></canvas>
+                </div>
+            </div>
+            <h3>Past Downtimes</h3>
+            <ul id="downtimes" class="list-unstyled"></ul>
+        </div>
+        
+    </body>
+    <script>
+        const ctx = document.getElementById('speedChart').getContext('2d');
+        let speedChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Ping (ms)',
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    data: [],
+                    type: 'bar',
+                    yAxisID: 'y',
+                }, {
+                    label: 'Download Speed (Mbps)',
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    data: [],
+                    fill: false,
+                    yAxisID: 'y1',
+                    showLine: false, // Display only points
+                }, {
+                    label: 'Upload Speed (Mbps)',
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                    data: [],
+                    fill: false,
+                    yAxisID: 'y1',
+                    showLine: false, // Display only points
+                }]
+            },
+            options: {
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            parser: 'YYYY-MM-DDTHH:mm:ss',
+                            unit: 'minute',
+                            tooltipFormat: 'll HH:mm'
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Ping (ms)'
+                        }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Speed (Mbps)'
+                        }
+                    }
+                }
+            }
+        });
+
+        function fetchStats() {
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('ping').innerText = data.ping_ms.toFixed(2) + ' ms';
+                    document.getElementById('download').innerText = data.download_speed.toFixed(2) + ' Mbps';
+                    document.getElementById('upload').innerText = data.upload_speed.toFixed(2) + ' Mbps';
+                    const now = new Date(data.date_time);
+                    speedChart.data.labels.push(now);
+                    speedChart.data.datasets[0].data.push(data.ping_ms);
+                    speedChart.data.datasets[1].data.push(data.download_speed);
+                    speedChart.data.datasets[2].data.push(data.upload_speed);
+                    speedChart.update();
+
+                    updateNetworkStatus(data.ping_ms);
+                    updateAvailability();
+                });
+        }
+
+        function updateNetworkStatus(ping) {
+            const statusElement = document.getElementById('network-status');
+            if (ping !== null && ping > 0) {
+                statusElement.textContent = 'Network is UP';
+                statusElement.style.backgroundColor = 'green';
+            } else {
+                statusElement.textContent = 'Network is DOWN';
+                statusElement.style.backgroundColor = 'red';
+            }
+        }
+
+        function updateAvailability() {
+            fetch('/api/availability')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('availability').innerText = data.availability.toFixed(2);
+                });
+        }
+
+        function loadHistoricalData() {
+            fetch('/api/historical')
+                .then(response => response.json())
+                .then(data => {
+                    data.reverse().forEach(entry => {
+                        const time = new Date(entry.date_time);
+                        speedChart.data.labels.push(time);
+                        speedChart.data.datasets[0].data.push(entry.ping_ms);
+                        speedChart.data.datasets[1].data.push(entry.download_speed);
+                        speedChart.data.datasets[2].data.push(entry.upload_speed);
+                    });
+                    speedChart.update();
+                });
+        }
+
+        setInterval(fetchStats, 60000);  // Update every minute
+        document.addEventListener('DOMContentLoaded', function() {
+            loadHistoricalData();
+            fetchStats();
+        });
+    </script>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    
+
+</html>
